@@ -22,8 +22,8 @@ export default function HomePage() {
               <Link href="#about" className="text-muted-foreground hover:text-foreground transition-colors">
                 About
               </Link>
-              <Button variant="outline" size="sm">
-                Sign In
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/login">Log In</Link>
               </Button>
             </nav>
           </div>
@@ -55,10 +55,16 @@ export default function HomePage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="text-lg px-8 bg-transparent">
-              Watch Demo
+            <Button variant="outline" size="lg" className="text-lg px-8 bg-transparent" asChild>
+              <Link href="/login">Log In</Link>
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            Already registered for the event?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Log in
+            </Link>
+          </p>
         </div>
       </section>
 

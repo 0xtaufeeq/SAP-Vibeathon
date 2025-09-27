@@ -3,8 +3,28 @@
 import { usePathname } from "next/navigation"
 import { Logo } from "@/components/ui/logo"
 import { Button } from "@/components/ui/button"
-import { Bell, Settings, Calendar, Users, MessageSquare, Home } from "lucide-react"
+import {
+  Bell,
+  Calendar,
+  Users,
+  MessageSquare,
+  Home,
+  User,
+  LogOut,
+  Settings as SettingsIcon,
+  Moon,
+  Sun,
+} from "lucide-react"
 import Link from "next/link"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useTheme } from "next-themes"
 
 interface NavigationProps {
   className?: string
@@ -12,6 +32,7 @@ interface NavigationProps {
 
 export function Navigation({ className = "" }: NavigationProps) {
   const pathname = usePathname()
+  const { theme, setTheme } = useTheme()
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: Home },
@@ -49,15 +70,52 @@ export function Navigation({ className = "" }: NavigationProps) {
 
           {/* User Actions */}
           <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="hidden md:inline-flex"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <Button variant="ghost" size="sm">
               <Bell className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
-              <Settings className="h-4 w-4" />
-            </Button>
-            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <span className="text-sm font-medium">JD</span>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <Avatar>
+                    <AvatarFallback className="bg-primary/20 text-primary text-sm font-medium">
+                      JD
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    View Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center gap-2">
+                    <SettingsIcon className="h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" asChild>
+                  <Link href="/" className="flex items-center gap-2">
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
