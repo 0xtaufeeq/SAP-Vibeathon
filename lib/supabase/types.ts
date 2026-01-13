@@ -1,11 +1,7 @@
 /**
  * Supabase Database Types
  * 
- * To generate these types automatically from your Supabase schema:
- * 1. Login to Supabase CLI: npx supabase login
- * 2. Generate types: npx supabase gen types typescript --project-id xteipiminuoezjdaqhcz > lib/supabase/types.ts
- * 
- * Or manually update this file based on your database schema
+ * Generated and refactored for the Event Management Platform.
  */
 
 export type Json =
@@ -19,211 +15,298 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      profiles: {
+      users: {
         Row: {
           id: string
-          created_at: string
-          updated_at: string
-          user_id: string
+          name: string
           email: string
-          full_name: string | null
-          avatar_url: string | null
+          phone_number: string | null
           bio: string | null
-          location: string | null
-          website: string | null
-          company: string | null
-          job_title: string | null
-          skills: string[] | null
-          interests: string[] | null
-          linkedin_url: string | null
-          twitter_url: string | null
-          github_url: string | null
+          profile_pic_url: string | null
+          user_type: 'STUDENT' | 'PROFESSIONAL'
+          is_super_admin: boolean
+          created_at: string
         }
         Insert: {
-          id?: string
-          created_at?: string
-          updated_at?: string
-          user_id: string
+          id: string
+          name: string
           email: string
-          full_name?: string | null
-          avatar_url?: string | null
+          phone_number?: string | null
           bio?: string | null
-          location?: string | null
-          website?: string | null
-          company?: string | null
-          job_title?: string | null
-          skills?: string[] | null
-          interests?: string[] | null
-          linkedin_url?: string | null
-          twitter_url?: string | null
-          github_url?: string | null
+          profile_pic_url?: string | null
+          user_type: 'STUDENT' | 'PROFESSIONAL'
+          is_super_admin?: boolean
+          created_at?: string
         }
         Update: {
           id?: string
-          created_at?: string
-          updated_at?: string
-          user_id?: string
+          name?: string
           email?: string
-          full_name?: string | null
-          avatar_url?: string | null
+          phone_number?: string | null
           bio?: string | null
-          location?: string | null
-          website?: string | null
-          company?: string | null
-          job_title?: string | null
-          skills?: string[] | null
-          interests?: string[] | null
+          profile_pic_url?: string | null
+          user_type?: 'STUDENT' | 'PROFESSIONAL'
+          is_super_admin?: boolean
+          created_at?: string
+        }
+      }
+      student_profiles: {
+        Row: {
+          user_id: string
+          institute_name: string
+          student_id_number: string | null
+          course_name: string | null
+        }
+        Insert: {
+          user_id: string
+          institute_name: string
+          student_id_number?: string | null
+          course_name?: string | null
+        }
+        Update: {
+          user_id?: string
+          institute_name?: string
+          student_id_number?: string | null
+          course_name?: string | null
+        }
+      }
+      professional_profiles: {
+        Row: {
+          user_id: string
+          company_name: string
+          designation: string | null
+          linkedin_url: string | null
+          is_verified: boolean
+        }
+        Insert: {
+          user_id: string
+          company_name: string
+          designation?: string | null
           linkedin_url?: string | null
-          twitter_url?: string | null
-          github_url?: string | null
+          is_verified?: boolean
+        }
+        Update: {
+          user_id?: string
+          company_name?: string
+          designation?: string | null
+          linkedin_url?: string | null
+          is_verified?: boolean
+        }
+      }
+      user_connections: {
+        Row: {
+          id: number
+          follower_id: string | null
+          followed_id: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          follower_id?: string | null
+          followed_id?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          follower_id?: string | null
+          followed_id?: string | null
+          status?: string
+          created_at?: string
         }
       }
       events: {
         Row: {
-          id: string
-          created_at: string
-          updated_at: string
+          id: number
+          owner_id: string | null
+          parent_event_id: number | null
           title: string
           description: string | null
+          venue: string | null
           start_time: string
           end_time: string
-          location: string | null
-          type: string
-          organizer_id: string
-          max_attendees: number | null
-          image_url: string | null
+          is_invite_only: boolean
+          is_volunteer_open: boolean
         }
         Insert: {
-          id?: string
-          created_at?: string
-          updated_at?: string
+          id?: number
+          owner_id?: string | null
+          parent_event_id?: number | null
           title: string
           description?: string | null
+          venue?: string | null
           start_time: string
           end_time: string
-          location?: string | null
-          type: string
-          organizer_id: string
-          max_attendees?: number | null
-          image_url?: string | null
+          is_invite_only?: boolean
+          is_volunteer_open?: boolean
         }
         Update: {
-          id?: string
-          created_at?: string
-          updated_at?: string
+          id?: number
+          owner_id?: string | null
+          parent_event_id?: number | null
           title?: string
           description?: string | null
+          venue?: string | null
           start_time?: string
           end_time?: string
-          location?: string | null
-          type?: string
-          organizer_id?: string
-          max_attendees?: number | null
-          image_url?: string | null
+          is_invite_only?: boolean
+          is_volunteer_open?: boolean
         }
       }
-      event_attendees: {
+      event_registrations: {
         Row: {
-          id: string
-          created_at: string
-          event_id: string
-          user_id: string
-          status: string
+          reg_id: number
+          event_id: number | null
+          user_id: string | null
+          ticket_hash: string
+          is_checked_in: boolean
+          checked_in_at: string | null
+          checked_in_by: string | null
+          registered_at: string
         }
         Insert: {
-          id?: string
-          created_at?: string
-          event_id: string
-          user_id: string
-          status?: string
+          reg_id?: number
+          event_id?: number | null
+          user_id?: string | null
+          ticket_hash?: string
+          is_checked_in?: boolean
+          checked_in_at?: string | null
+          checked_in_by?: string | null
+          registered_at?: string
         }
         Update: {
-          id?: string
-          created_at?: string
-          event_id?: string
+          reg_id?: number
+          event_id?: number | null
+          user_id?: string | null
+          ticket_hash?: string
+          is_checked_in?: boolean
+          checked_in_at?: string | null
+          checked_in_by?: string | null
+          registered_at?: string
+        }
+      }
+      event_team: {
+        Row: {
+          id: number
+          event_id: number | null
+          user_id: string | null
+          role: 'ORGANIZER' | 'VOLUNTEER'
+          status: 'PENDING' | 'APPROVED' | 'REJECTED'
+          can_scan_qr: boolean
+          can_manage_tasks: boolean
+          assigned_by: string | null
+        }
+        Insert: {
+          id?: number
+          event_id?: number | null
+          user_id?: string | null
+          role: 'ORGANIZER' | 'VOLUNTEER'
+          status?: 'PENDING' | 'APPROVED' | 'REJECTED'
+          can_scan_qr?: boolean
+          can_manage_tasks?: boolean
+          assigned_by?: string | null
+        }
+        Update: {
+          id?: number
+          event_id?: number | null
+          user_id?: string | null
+          role?: 'ORGANIZER' | 'VOLUNTEER'
+          status?: 'PENDING' | 'APPROVED' | 'REJECTED'
+          can_scan_qr?: boolean
+          can_manage_tasks?: boolean
+          assigned_by?: string | null
+        }
+      }
+      master_tags: {
+        Row: {
+          id: number
+          tag_name: string
+        }
+        Insert: {
+          id?: number
+          tag_name: string
+        }
+        Update: {
+          id?: number
+          tag_name?: string
+        }
+      }
+      user_interests: {
+        Row: {
+          user_id: string
+          tag_id: number
+        }
+        Insert: {
+          user_id: string
+          tag_id: number
+        }
+        Update: {
           user_id?: string
-          status?: string
+          tag_id?: number
         }
       }
-      connections: {
+      event_tags: {
         Row: {
-          id: string
-          created_at: string
-          user_id: string
-          connected_user_id: string
-          status: string
-          message: string | null
+          event_id: number
+          tag_id: number
         }
         Insert: {
-          id?: string
-          created_at?: string
-          user_id: string
-          connected_user_id: string
-          status?: string
-          message?: string | null
+          event_id: number
+          tag_id: number
         }
         Update: {
-          id?: string
-          created_at?: string
-          user_id?: string
-          connected_user_id?: string
-          status?: string
-          message?: string | null
-        }
-      }
-      messages: {
-        Row: {
-          id: string
-          created_at: string
-          sender_id: string
-          receiver_id: string
-          content: string
-          read: boolean
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          sender_id: string
-          receiver_id: string
-          content: string
-          read?: boolean
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          sender_id?: string
-          receiver_id?: string
-          content?: string
-          read?: boolean
+          event_id?: number
+          tag_id?: number
         }
       }
       chat_conversations: {
         Row: {
           id: string
+          user1_id: string | null
+          user2_id: string | null
           created_at: string
           updated_at: string
-          user1_id: string
-          user2_id: string
-          last_message: string | null
-          last_message_at: string | null
         }
         Insert: {
           id?: string
+          user1_id?: string | null
+          user2_id?: string | null
           created_at?: string
           updated_at?: string
-          user1_id: string
-          user2_id: string
-          last_message?: string | null
-          last_message_at?: string | null
         }
         Update: {
           id?: string
+          user1_id?: string | null
+          user2_id?: string | null
           created_at?: string
           updated_at?: string
-          user1_id?: string
-          user2_id?: string
-          last_message?: string | null
-          last_message_at?: string | null
+        }
+      }
+      messages: {
+        Row: {
+          id: number
+          conversation_id: string | null
+          sender_id: string | null
+          content: string
+          is_read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          conversation_id?: string | null
+          sender_id?: string | null
+          content: string
+          is_read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          conversation_id?: string | null
+          sender_id?: string | null
+          content?: string
+          is_read?: boolean
+          created_at?: string
         }
       }
     }
@@ -234,15 +317,20 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_type_enum: 'STUDENT' | 'PROFESSIONAL'
+      team_role_enum: 'ORGANIZER' | 'VOLUNTEER'
+      team_status_enum: 'PENDING' | 'APPROVED' | 'REJECTED'
     }
   }
 }
 
 // Helper types for easier usage
-export type Profile = Database['public']['Tables']['profiles']['Row']
+export type User = Database['public']['Tables']['users']['Row']
+export type StudentProfile = Database['public']['Tables']['student_profiles']['Row']
+export type ProfessionalProfile = Database['public']['Tables']['professional_profiles']['Row']
 export type Event = Database['public']['Tables']['events']['Row']
-export type EventAttendee = Database['public']['Tables']['event_attendees']['Row']
-export type Connection = Database['public']['Tables']['connections']['Row']
-export type Message = Database['public']['Tables']['messages']['Row']
+export type EventRegistration = Database['public']['Tables']['event_registrations']['Row']
+export type EventTeamMember = Database['public']['Tables']['event_team']['Row']
+export type MasterTag = Database['public']['Tables']['master_tags']['Row']
 export type ChatConversation = Database['public']['Tables']['chat_conversations']['Row']
+export type Message = Database['public']['Tables']['messages']['Row']
