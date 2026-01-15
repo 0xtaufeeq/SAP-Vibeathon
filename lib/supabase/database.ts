@@ -31,6 +31,58 @@ export async function getById<T>(table: string, id: string): Promise<T | null> {
 }
 
 /**
+ * Get a full user profile with all details (Backend abstraction)
+ */
+export async function getUserProfile(userId: string) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('profile_view')
+    .select('*')
+    .eq('id', userId)
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+/**
+ * Create a new connection between two users
+ */
+export async function connectUsers(followerId: string, followedId: string) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('user_connections')
+    .insert({
+      follower_id: followerId,
+      followed_id: followedId,
+      status: 'PENDING'
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Register for an event
+ */
+export async function registerForEvent(userId: string, eventId: number) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('event_registrations')
+    .insert({
+      user_id: userId,
+      event_id: eventId
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
  * Create a new record
  */
 export async function create<T>(table: string, record: Partial<T>): Promise<T> {

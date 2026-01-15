@@ -136,7 +136,9 @@ export default function RegisterPage() {
           data: {
             full_name: data.fullName,
             mobile_number: data.mobileNumber,
-            attendee_category: attendeeCategory,
+            phone: data.mobileNumber, // Added to match trigger COALESCE
+            user_type: attendeeCategory,
+            attendee_category: attendeeCategory, // Keep for backward compatibility
             ...(attendeeCategory === "professional" ? {
               company: professionalData.company,
               designation: professionalData.designation,

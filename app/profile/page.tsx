@@ -27,7 +27,9 @@ import {
   QrCode,
   Calendar,
   Award,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import { useUser } from "@/hooks/use-supabase"
 import { useRouter } from "next/navigation"
@@ -35,6 +37,18 @@ import { toast } from "sonner"
 import QRCodeLib from "qrcode"
 import { Navigation } from "@/components/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { motion, AnimatePresence } from "framer-motion"
+
+interface Registration {
+  reg_id: number
+  event_id: number
+  ticket_hash: string
+  event_title: string
+  start_time: string
+  venue: string
+  is_checked_in: boolean
+  qr_code?: string
+}
 
 interface UserProfile {
   id: string
@@ -56,7 +70,14 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const { user, loading: userLoading } = useUser()
-  const [qrCode, setQrCode] = useState<string>("")
+  const [registrations, setRegistrations] = useState<Registration[]>([])
+  const [stats, setStats] = useState({
+    attended: 0,
+    connections: 0,
+    joined: 0,
+    volunteered: 0
+  })
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -101,47 +122,130 @@ export default function ProfilePage() {
     if (!user) return
     
     try {
-      // Generate QR code with user ID
-      const qrData = JSON.stringify({
-        userId: user.id,
-        email: user.email,
-        name: user.user_metadata?.full_name || "User",
-        checkInCode: `EVENT-${user.id.substring(0, 8).toUpperCase()}`,
-        timestamp: new Date().toISOString()
-      })
+      const supabase = createClient()
       
-      const qrCodeDataUrl = await QRCodeLib.toDataURL(qrData, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF"
-        }
-      })
-      
-      setQrCode(qrCodeDataUrl)
+      // Fetch registrations with event details
+      const { data, error } = await supabase
+        .from('event_registrations')
+        .select(`
+          reg_id,
+          event_id,
+          ticket_hash,
+          is_checked_in,
+          events (
+            title,
+            start_time,
+            venue
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'APPROVED')
+
+      if (error) throw error
+
+      if (data) {
+        const regsWithQr = await Promise.all(data.map(async (reg: any) => {
+          const qrData = JSON.stringify({
+            regId: reg.reg_id,
+            ticketHash: reg.ticket_hash,
+            userId: user.id,
+            eventId: reg.event_id
+          })
+          
+          const qrCodeDataUrl = await QRCodeLib.toDataURL(qrData, {
+            width: 300,
+            margin: 2,
+            color: {
+              dark: "#000000",
+              light: "#FFFFFF"
+            }
+          })
+
+          return {
+            reg_id: reg.reg_id,
+            event_id: reg.event_id,
+            ticket_hash: reg.ticket_hash,
+            event_title: reg.events.title,
+            start_time: reg.events.start_time,
+            venue: reg.events.venue,
+            is_checked_in: reg.is_checked_in,
+            qr_code: qrCodeDataUrl
+          }
+        }))
+        setRegistrations(regsWithQr)
+        
+        // Calculate basic stats from registrations
+        const attended = data.filter((r: any) => r.is_checked_in).length
+        const joined = data.length
+        
+        // Fetch connections count
+        const { count: connectCount } = await supabase
+          .from('user_connections')
+          .select('*', { count: 'exact', head: true })
+          .or(`follower_id.eq.${user.id},followed_id.eq.${user.id}`)
+          .eq('status', 'APPROVED')
+
+        // Fetch volunteering count
+        const { count: volunteerCount } = await supabase
+          .from('event_team')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('role', 'VOLUNTEER')
+          .eq('status', 'APPROVED')
+
+        setStats({
+          attended: attended,
+          joined: joined,
+          connections: connectCount || 0,
+          volunteered: volunteerCount || 0
+        })
+      }
     } catch (error) {
       console.error("Error loading profile:", error)
-      toast.error("Failed to load profile")
+      toast.error("Failed to load registrations")
     } finally {
       setLoading(false)
     }
   }
 
-  const downloadQRCode = () => {
-    if (!qrCode) return
+  const downloadQRCode = (reg: Registration) => {
+    if (!reg.qr_code) return
     
     const link = document.createElement("a")
-    link.href = qrCode
-    link.download = `event-qr-${user?.user_metadata?.full_name || "user"}.png`
+    link.href = reg.qr_code
+    link.download = `qr-${reg.event_title.replace(/\s+/g, '-').toLowerCase()}.png`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    toast.success("QR code downloaded!")
+    toast.success(`${reg.event_title} QR code downloaded!`)
+  }
+
+  const downloadAllQRs = async () => {
+    if (registrations.length === 0) return
+    
+    toast.info("Preparing QR codes for download...")
+    
+    // For simplicity in a web env without specialized zip libs, we'll download them sequentially or just a few.
+    // In a real app one might use jszip.
+    for (const reg of registrations) {
+      downloadQRCode(reg)
+      // Small delay to prevent browser blocking multiple downloads
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    
+    toast.success("All QR codes downloaded!")
+  }
+
+  const nextQR = () => {
+    setCurrentIndex((prev) => (prev + 1) % registrations.length)
+  }
+
+  const prevQR = () => {
+    setCurrentIndex((prev) => (prev - 1 + registrations.length) % registrations.length)
   }
 
   const shareProfile = async () => {
-    if (navigator.share) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
           title: "My Event Profile",
@@ -213,7 +317,9 @@ export default function ProfilePage() {
   }
 
   const metadata = user.user_metadata
-  const isProfessional = metadata?.user_type === "professional"
+  const isProfessional = 
+    metadata?.user_type?.toLowerCase() === "professional" || 
+    metadata?.attendee_category?.toLowerCase() === "professional"
 
   return (
     <div className="min-h-screen bg-background">
@@ -490,86 +596,158 @@ export default function ProfilePage() {
                 <CardTitle>Event Activity</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-3xl font-bold">0</p>
-                    <p className="text-sm text-muted-foreground">Sessions Attended</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-3xl font-bold text-primary">{stats.attended}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Sessions Attended</p>
                   </div>
-                  <div>
-                    <p className="text-3xl font-bold">0</p>
-                    <p className="text-sm text-muted-foreground">Connections Made</p>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-3xl font-bold text-primary">{stats.connections}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Connections Made</p>
                   </div>
-                  <div>
-                    <p className="text-3xl font-bold">0</p>
-                    <p className="text-sm text-muted-foreground">Events Joined</p>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-3xl font-bold text-primary">{stats.joined}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Events Joined</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/30">
+                    <p className="text-3xl font-bold text-primary">{stats.volunteered}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Volunteered</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column - QR Code */}
+          {/* Right Column - QR Code Slider */}
           <div className="space-y-6">
-            <Card className="sticky top-4 animate-fade-in-up transition-all duration-300 hover:shadow-xl" style={{ animationDelay: '0.2s', opacity: 0 }}>
-              <CardHeader className="text-center">
+            <Card className="sticky top-4 animate-fade-in-up transition-all duration-300 hover:shadow-xl overflow-hidden" style={{ animationDelay: '0.2s' }}>
+              <CardHeader className="text-center pb-2">
                 <div className="flex justify-center mb-2">
                   <div className="p-3 bg-primary/10 rounded-full transition-all duration-300 hover:bg-primary/20 hover:scale-110 hover:rotate-12">
                     <QrCode className="h-8 w-8 text-primary" />
                   </div>
                 </div>
-                <CardTitle>Your Check-in QR Code</CardTitle>
+                <CardTitle>Your Event Passes</CardTitle>
                 <CardDescription>
-                  Show this QR code at the event entrance for quick check-in
+                  {registrations.length > 0 
+                    ? `You have ${registrations.length} registered event${registrations.length > 1 ? 's' : ''}`
+                    : "You haven't registered for any events yet"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {qrCode && (
-                  <div className="flex justify-center">
-                    <div className="p-4 bg-white rounded-lg border-2 border-primary transition-all duration-300 hover:border-primary/70 hover:shadow-lg hover:scale-105 animate-bounce-in">
-                      <img 
-                        src={qrCode} 
-                        alt="Event QR Code" 
-                        className="w-full h-auto"
-                      />
+                {registrations.length > 0 ? (
+                  <>
+                    <div className="relative group">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={currentIndex}
+                          initial={{ opacity: 0, x: 50 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -50 }}
+                          transition={{ duration: 0.3 }}
+                          className="flex flex-col items-center"
+                        >
+                          <div className="p-4 bg-white rounded-lg border-2 border-primary transition-all duration-300 hover:border-primary/70 hover:shadow-lg hover:scale-105">
+                            <img 
+                              src={registrations[currentIndex].qr_code} 
+                              alt={`${registrations[currentIndex].event_title} QR Code`} 
+                              className="w-48 h-48"
+                            />
+                          </div>
+                          
+                          <div className="mt-4 text-center">
+                            <h4 className="font-bold text-lg line-clamp-1">{registrations[currentIndex].event_title}</h4>
+                            <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(registrations[currentIndex].start_time).toLocaleDateString()}
+                            </p>
+                            <p className="text-xs font-mono font-semibold mt-1 text-primary">
+                              {registrations[currentIndex].ticket_hash.substring(0, 8).toUpperCase()}
+                            </p>
+                          </div>
+                        </motion.div>
+                      </AnimatePresence>
+
+                      {registrations.length > 1 && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute left-0 top-1/2 -translate-y-12 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={prevQR}
+                          >
+                            <ChevronLeft className="h-6 w-6" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-1/2 -translate-y-12 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={nextQR}
+                          >
+                            <ChevronRight className="h-6 w-6" />
+                          </Button>
+                          
+                          <div className="flex justify-center gap-1 mt-2">
+                            {registrations.map((_, idx) => (
+                              <div 
+                                key={idx} 
+                                className={`h-1.5 rounded-full transition-all ${idx === currentIndex ? 'w-4 bg-primary' : 'w-1.5 bg-primary/20'}`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button 
+                        className="w-full transition-all duration-300 hover:scale-105" 
+                        onClick={() => downloadQRCode(registrations[currentIndex])}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Save Current
+                      </Button>
+                      <Button 
+                        className="w-full transition-all duration-300 hover:scale-105" 
+                        onClick={downloadAllQRs}
+                        variant="default"
+                        size="sm"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Save All
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="bg-muted rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                      <Calendar className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">No registrations found.</p>
+                    <Button 
+                      variant="link" 
+                      onClick={() => router.push('/explore')}
+                      className="mt-2"
+                    >
+                      Browse events
+                    </Button>
                   </div>
                 )}
-                
-                <div className="text-center">
-                  <p className="text-sm font-mono font-semibold mb-1 transition-colors hover:text-primary">
-                    {`EVENT-${user.id.substring(0, 8).toUpperCase()}`}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Your unique check-in code
-                  </p>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Button 
-                    className="w-full transition-all duration-300 hover:scale-105 hover:shadow-lg" 
-                    onClick={downloadQRCode}
-                    variant="outline"
-                  >
-                    <Download className="h-4 w-4 mr-2 transition-transform duration-300 hover:-translate-y-1" />
-                    Download QR Code
-                  </Button>
-                  <p className="text-xs text-center text-muted-foreground">
-                    Save this QR code on your phone for easy access
-                  </p>
-                </div>
 
                 <div className="bg-muted p-4 rounded-lg transition-all duration-300 hover:bg-muted/80">
                   <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                    <Calendar className="h-4 w-4 transition-transform duration-300 hover:rotate-12" />
-                    Check-in Information
+                    <Calendar className="h-4 w-4" />
+                    Check-in Info
                   </h4>
                   <ul className="text-xs space-y-1 text-muted-foreground">
-                    <li>• Valid for event entrance</li>
-                    <li>• Can be scanned multiple times</li>
-                    <li>• Keep it secure and don't share</li>
-                    <li>• Works offline once downloaded</li>
+                    <li>• One QR per event</li>
+                    <li>• Scan at the entry gate</li>
+                    <li>• Works offline after download</li>
+                    <li>• Keep your ticket hash private</li>
                   </ul>
                 </div>
               </CardContent>

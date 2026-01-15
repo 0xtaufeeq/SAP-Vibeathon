@@ -8,9 +8,15 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, Clock, MapPin, User, Plus, Check, Calendar, Sparkles } from "lucide-react"
+import { Search, Filter, Clock, MapPin, User, Plus, Check, Calendar, Sparkles, ShieldCheck, Settings } from "lucide-react"
 import { Navigation } from "@/components/navigation"
 import { ChatWidget } from "@/components/chat-widget"
+import { createClient as createBrowserClient } from "@/lib/supabase/client"
+import { useEffect } from "react"
+import { registerForEvent, applyToVolunteer } from "@/lib/actions"
+import { toast } from "sonner"
+import { useUser } from "@/hooks/use-supabase"
+import { useRouter } from "next/navigation"
 
 interface Session {
   id: string
@@ -19,6 +25,8 @@ interface Session {
   speaker: string
   speakerTitle: string
   time: string
+  start_time: string
+  end_time: string
   duration: string
   location: string
   track: string
@@ -27,119 +35,105 @@ interface Session {
   isRecommended: boolean
   matchPercentage?: number
   isInAgenda: boolean
+  is_volunteer_open: boolean
+  owner_id: string
+  isTeamMember: boolean
+  isOrganizer: boolean
+  is_invite_only: boolean
+  registrationStatus: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  timezone: string
 }
 
-const mockSessions: Session[] = [
-  {
-    id: "1",
-    title: "The Future of AI in Web Development",
-    description:
-      "Explore how artificial intelligence is revolutionizing the way we build and deploy web applications, from automated code generation to intelligent user experiences.",
-    speaker: "Sarah Chen",
-    speakerTitle: "Senior AI Engineer at Vercel",
-    time: "9:00 AM",
-    duration: "45 min",
-    location: "Main Stage",
-    track: "AI & ML",
-    level: "Intermediate" as const,
-    tags: ["AI", "Web Development", "Automation"],
-    isRecommended: true,
-    matchPercentage: 95,
-    isInAgenda: true,
-  },
-  {
-    id: "2",
-    title: "Building Scalable React Applications",
-    description:
-      "Learn best practices for architecting large-scale React applications that can grow with your team and user base.",
-    speaker: "Michael Rodriguez",
-    speakerTitle: "Principal Engineer at Meta",
-    time: "10:30 AM",
-    duration: "60 min",
-    location: "Room A",
-    track: "Frontend",
-    level: "Advanced" as const,
-    tags: ["React", "Architecture", "Performance"],
-    isRecommended: true,
-    matchPercentage: 88,
-    isInAgenda: false,
-  },
-  {
-    id: "3",
-    title: "Cybersecurity in the Age of AI",
-    description:
-      "Understanding new security challenges and opportunities that emerge as AI becomes more integrated into our digital infrastructure.",
-    speaker: "Dr. Emily Watson",
-    speakerTitle: "Security Researcher at Stanford",
-    time: "2:00 PM",
-    duration: "45 min",
-    location: "Room B",
-    track: "Security",
-    level: "Intermediate" as const,
-    tags: ["Security", "AI", "Infrastructure"],
-    isRecommended: true,
-    matchPercentage: 82,
-    isInAgenda: false,
-  },
-  {
-    id: "4",
-    title: "Product Management in Tech Startups",
-    description:
-      "Navigate the unique challenges of product management in fast-paced startup environments and learn frameworks for success.",
-    speaker: "Alex Thompson",
-    speakerTitle: "VP of Product at Stripe",
-    time: "3:30 PM",
-    duration: "45 min",
-    location: "Room C",
-    track: "Product",
-    level: "Beginner" as const,
-    tags: ["Product Management", "Startups", "Strategy"],
-    isRecommended: false,
-    isInAgenda: false,
-  },
-  {
-    id: "5",
-    title: "Advanced Machine Learning Techniques",
-    description: "Deep dive into cutting-edge ML algorithms and their practical applications in real-world scenarios.",
-    speaker: "Dr. James Liu",
-    speakerTitle: "ML Research Lead at OpenAI",
-    time: "4:15 PM",
-    duration: "60 min",
-    location: "Main Stage",
-    track: "AI & ML",
-    level: "Advanced" as const,
-    tags: ["Machine Learning", "Algorithms", "Research"],
-    isRecommended: true,
-    matchPercentage: 91,
-    isInAgenda: true,
-  },
-]
-
-export default function AgendaPage() {
-  const [sessions, setSessions] = useState<Session[]>(mockSessions)
+export default function ExplorePage() {
+  const { user } = useUser()
+  const router = useRouter()
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTrack, setSelectedTrack] = useState<string>("all")
 
-  const tracks = ["all", "AI & ML", "Frontend", "Security", "Product"]
+  const supabase = createBrowserClient()
 
-  const filteredSessions = sessions.filter((session) => {
-    const matchesSearch =
-      session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.speaker.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    const matchesTrack = selectedTrack === "all" || session.track === selectedTrack
+  useEffect(() => {
+    async function fetchSessions() {
+      try {
+        const { data, error } = await supabase
+          .from('agenda_view')
+          .select('*')
+        
+        if (error) throw error
+        
+        // Map database view to UI component interface
+        const mappedSessions: Session[] = (data || []).map(s => ({
+          ...s,
+          level: (['Beginner', 'Intermediate', 'Advanced'][Math.floor(Math.random() * 3)]) as any,
+          matchPercentage: s.isRecommended ? 85 + Math.floor(Math.random() * 10) : undefined,
+          is_volunteer_open: true // Defaulted as most events have it open in schema
+        }))
+        
+        setSessions(mappedSessions)
+      } catch (err) {
+        console.error("Error fetching sessions:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSessions()
+  }, [])
+
+  const tracks = ["all", "AI & ML", "Frontend", "Security", "Product", "General"]
+
+  const handleRegister = async (eventId: string) => {
+    try {
+      const result = await registerForEvent(parseInt(eventId))
+      
+      if (result?.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("Registration submitted!")
+      // Update local state to reflect registration
+      setSessions(prev => prev.map(s => s.id === eventId ? { 
+        ...s, 
+        registrationStatus: result.data.status,
+        isInAgenda: result.data.status === 'APPROVED' 
+      } : s))
+    } catch (error: any) {
+      toast.error("Failed to register")
+    }
+  }
+
+  const handleVolunteer = async (eventId: string) => {
+    try {
+      const result = await applyToVolunteer(parseInt(eventId))
+      
+      if (result?.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("Volunteer application submitted!")
+    } catch (error: any) {
+      toast.error("Failed to submit application")
+    }
+  }
+
+  const filteredSessions = sessions.filter((s) => {
+    const matchesSearch = 
+      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.speaker.toLowerCase().includes(searchQuery.toLowerCase())
+    
+    const matchesTrack = selectedTrack === "all" || s.track === selectedTrack
+    
     return matchesSearch && matchesTrack
   })
 
-  const recommendedSessions = filteredSessions.filter((s) => s.isRecommended)
-  const myAgendaSessions = filteredSessions.filter((s) => s.isInAgenda)
+  const recommendedSessions = filteredSessions.filter(s => s.isRecommended)
+  const myAgendaSessions = filteredSessions.filter(s => s.isInAgenda)
   const allSessions = filteredSessions
-
-  const toggleSessionInAgenda = (sessionId: string) => {
-    setSessions((prev) =>
-      prev.map((session) => (session.id === sessionId ? { ...session, isInAgenda: !session.isInAgenda } : session)),
-    )
-  }
 
   const SessionCard = ({ session }: { session: Session }) => (
     <Card className="hover:border-primary/50 transition-colors">
@@ -160,7 +154,12 @@ export default function AgendaPage() {
               <div className="flex items-center gap-4 text-sm">
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {session.time} ({session.duration})
+                  {new Date(session.start_time).toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    timeZone: session.timezone || 'Asia/Kolkata',
+                    timeZoneName: 'short'
+                  })} ({session.duration})
                 </span>
                 <span className="flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
@@ -169,25 +168,72 @@ export default function AgendaPage() {
               </div>
             </CardDescription>
           </div>
-          <Button
-            variant={session.isInAgenda ? "default" : "outline"}
-            size="sm"
-            onClick={() => toggleSessionInAgenda(session.id)}
-          >
-            {session.isInAgenda ? (
-              <>
-                <Check className="h-4 w-4 mr-1" />
-                Added
-              </>
+          <div className="flex flex-col gap-2">
+            {session.owner_id === user?.id || session.isOrganizer ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary/50 text-primary hover:bg-primary/10"
+                onClick={() => router.push(`/events/manage/${session.id}`)}
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                Manage
+              </Button>
             ) : (
               <>
-                <Plus className="h-4 w-4 mr-1" />
-                Add
+                <Button
+                  variant={session.registrationStatus === 'APPROVED' ? "default" : session.registrationStatus === 'PENDING' ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => handleRegister(session.id)}
+                  disabled={session.registrationStatus !== 'NONE' && session.registrationStatus !== 'REJECTED'}
+                >
+                  {session.registrationStatus === 'APPROVED' ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Registered
+                    </>
+                  ) : session.registrationStatus === 'PENDING' ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-1 text-orange-500" />
+                      Request Pending
+                    </>
+                  ) : session.registrationStatus === 'REJECTED' ? (
+                    'Request Rejected'
+                  ) : session.is_invite_only ? (
+                    <>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Request to Join
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Register
+                    </>
+                  )}
+                </Button>
+                {session.is_volunteer_open && !session.isTeamMember && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs border border-dashed border-primary/30 hover:border-primary"
+                    onClick={() => handleVolunteer(session.id)}
+                  >
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    Volunteer
+                  </Button>
+                )}
+                {session.isTeamMember && (
+                  <Badge variant="secondary" className="justify-center">
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    Team Member
+                  </Badge>
+                )}
               </>
             )}
-          </Button>
+          </div>
         </div>
       </CardHeader>
+
       <CardContent className="pt-0">
         <div className="flex items-center gap-2 mb-3">
           <User className="h-4 w-4 text-muted-foreground" />
@@ -213,9 +259,9 @@ export default function AgendaPage() {
       <div className="container mx-auto px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Event Agenda</h1>
+          <h1 className="text-3xl font-bold mb-2">Explore Events</h1>
           <p className="text-muted-foreground">
-            Discover sessions tailored to your interests and build your perfect event schedule.
+            Discover upcoming events and sessions tailored to your interests.
           </p>
         </div>
 

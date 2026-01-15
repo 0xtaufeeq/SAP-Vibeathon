@@ -269,6 +269,23 @@ export default function OnboardingPage() {
     setIsSubmitting(true)
 
     try {
+      let linkedinPdfUrl = ""
+      if (formData.linkedinFile) {
+        const fileExt = formData.linkedinFile.name.split('.').pop()
+        const fileName = `${Math.random()}.${fileExt}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('profiles')
+          .upload(fileName, formData.linkedinFile)
+        
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('profiles')
+            .getPublicUrl(fileName)
+          linkedinPdfUrl = publicUrl
+        }
+      }
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -277,6 +294,7 @@ export default function OnboardingPage() {
             full_name: formData.fullName,
             phone: formData.phone,
             user_type: formData.userType,
+            linkedin_pdf_url: linkedinPdfUrl,
             ...(formData.userType === "professional"
               ? {
                   company: formData.company,

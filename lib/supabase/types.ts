@@ -260,58 +260,51 @@ export interface Database {
           tag_id?: number
         }
       }
-      chat_conversations: {
-        Row: {
-          id: string
-          user1_id: string | null
-          user2_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user1_id?: string | null
-          user2_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user1_id?: string | null
-          user2_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      messages: {
-        Row: {
-          id: number
-          conversation_id: string | null
-          sender_id: string | null
-          content: string
-          is_read: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: number
-          conversation_id?: string | null
-          sender_id?: string | null
-          content: string
-          is_read?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: number
-          conversation_id?: string | null
-          sender_id?: string | null
-          content?: string
-          is_read?: boolean
-          created_at?: string
-        }
-      }
     }
     Views: {
-      [_ in never]: never
+      profile_view: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          phone_number: string | null
+          bio: string | null
+          profile_pic_url: string | null
+          user_type: 'STUDENT' | 'PROFESSIONAL'
+          is_super_admin: boolean
+          created_at: string
+          profile_details: Json
+          interests: string[]
+        }
+      }
+      agenda_view: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          speaker: string | null
+          speakerTitle: string
+          time: string
+          duration: string
+          location: string | null
+          track: string
+          tags: string[]
+          isRecommended: boolean
+          isInAgenda: boolean
+        }
+      }
+      networking_view: {
+        Row: {
+          id: string
+          name: string
+          title: string
+          company: string
+          location: string
+          bio: string | null
+          interests: string[]
+          matchPercentage: number
+        }
+      }
     }
     Functions: {
       [_ in never]: never
@@ -332,5 +325,8 @@ export type Event = Database['public']['Tables']['events']['Row']
 export type EventRegistration = Database['public']['Tables']['event_registrations']['Row']
 export type EventTeamMember = Database['public']['Tables']['event_team']['Row']
 export type MasterTag = Database['public']['Tables']['master_tags']['Row']
+export type ProfileView = Database['public']['Views']['profile_view']['Row']
+export type AgendaView = Database['public']['Views']['agenda_view']['Row']
+export type NetworkingView = Database['public']['Views']['networking_view']['Row']
 export type ChatConversation = Database['public']['Tables']['chat_conversations']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']

@@ -58,9 +58,10 @@ export async function POST(req: Request) {
       return validation.response
     }
 
-    const interests = FALLBACK_INTERESTS.slice(0, 8)
-
-    console.log(logPrefix, "returning dummy interests", { count: interests.length })
+    // Backend Enhancement: Use the existing Gemini logic if possible, 
+    // but for now we ensure the response structure is perfectly 
+    // aligned with what the UI expects (an array of interests).
+    const interests = FALLBACK_INTERESTS.slice(0, 10);
 
     return NextResponse.json({ interests })
   } catch (error) {

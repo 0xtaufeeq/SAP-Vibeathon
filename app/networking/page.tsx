@@ -12,6 +12,8 @@ import { Heart, X, User, MapPin, Briefcase, Search, Users, MessageSquare, Undo2,
 import { Navigation } from "@/components/navigation"
 import { ChatWidget } from "@/components/chat-widget"
 import Link from "next/link"
+import { createClient as createBrowserClient } from "@/lib/supabase/client"
+import { useEffect } from "react"
 
 interface Participant {
   id: string
@@ -27,65 +29,35 @@ interface Participant {
   isIgnored?: boolean
 }
 
-const mockParticipants: Participant[] = [
-  {
-    id: "1",
-    name: "Sarah Chen",
-    title: "Senior AI Engineer",
-    company: "Vercel",
-    location: "San Francisco, CA",
-    bio: "Passionate about building AI-powered developer tools and creating seamless user experiences. Love discussing the intersection of AI and web development.",
-    interests: ["Artificial Intelligence", "Web Development", "Machine Learning", "Developer Tools", "React"],
-    matchPercentage: 95,
-  },
-  {
-    id: "2",
-    name: "Michael Rodriguez",
-    title: "Principal Engineer",
-    company: "Meta",
-    location: "Menlo Park, CA",
-    bio: "Building scalable systems that serve billions of users. Interested in distributed systems, performance optimization, and engineering leadership.",
-    interests: ["React", "Architecture", "Performance", "Leadership", "Distributed Systems"],
-    matchPercentage: 88,
-  },
-  {
-    id: "3",
-    name: "Dr. Emily Watson",
-    title: "Security Researcher",
-    company: "Stanford University",
-    location: "Palo Alto, CA",
-    bio: "Researching cybersecurity challenges in AI systems. Published author on security best practices and threat modeling.",
-    interests: ["Cybersecurity", "AI Safety", "Research", "Threat Modeling", "Privacy"],
-    matchPercentage: 82,
-  },
-  {
-    id: "4",
-    name: "Alex Thompson",
-    title: "VP of Product",
-    company: "Stripe",
-    location: "San Francisco, CA",
-    bio: "Product leader with 10+ years building fintech products. Passionate about user experience and data-driven decision making.",
-    interests: ["Product Management", "Fintech", "User Experience", "Data Analytics", "Strategy"],
-    matchPercentage: 76,
-  },
-  {
-    id: "5",
-    name: "Dr. James Liu",
-    title: "ML Research Lead",
-    company: "OpenAI",
-    location: "San Francisco, CA",
-    bio: "Leading research in large language models and their applications. Excited about the future of AI and its impact on society.",
-    interests: ["Machine Learning", "Research", "Large Language Models", "AI Ethics", "Deep Learning"],
-    matchPercentage: 91,
-  },
-]
-
 export default function NetworkingPage() {
-  const participants = mockParticipants
+  const [participants, setParticipants] = useState<Participant[]>([])
+  const [loading, setLoading] = useState(true)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [connections, setConnections] = useState<Participant[]>([])
   const [ignored, setIgnored] = useState<Participant[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+
+  const supabase = createBrowserClient()
+
+  useEffect(() => {
+    async function fetchParticipants() {
+      try {
+        const { data, error } = await supabase
+          .from('networking_view')
+          .select('*')
+        
+        if (error) throw error
+        
+        setParticipants(data || [])
+      } catch (err) {
+        console.error("Error fetching participants:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchParticipants()
+  }, [])
 
   const currentParticipant = participants[currentIndex]
 
