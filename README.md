@@ -97,7 +97,7 @@ event-companion/
    ```env
    # Optional: Google Gemini AI integration
    GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
-   GOOGLE_GEMINI_MODEL=gemini-1.5-flash
+   GOOGLE_GEMINI_MODEL=gemini-2.5-flash
    ```
 
 4. **Start the development server**

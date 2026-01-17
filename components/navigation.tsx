@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Logo } from "@/components/ui/logo"
 import { Button } from "@/components/ui/button"
@@ -37,8 +38,13 @@ export function Navigation({ className = "" }: NavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const { user } = useUser()
   const supabase = createClient()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -71,7 +77,7 @@ export function Navigation({ className = "" }: NavigationProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: Home },
-    { href: "/agenda", label: "Agenda", icon: Calendar },
+    { href: "/explore", label: "Explore", icon: Calendar },
     { href: "/networking", label: "Networking", icon: Users },
     { href: "/chat", label: "AI Concierge", icon: MessageSquare },
   ]
@@ -111,10 +117,12 @@ export function Navigation({ className = "" }: NavigationProps) {
               variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={mounted ? (theme === "dark" ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"}
               className="rounded-full hover:bg-muted/50"
             >
-              {theme === "dark" ? (
+              {!mounted ? (
+                <div className="h-5 w-5" />
+              ) : theme === "dark" ? (
                 <Sun className="h-5 w-5" />
               ) : (
                 <Moon className="h-5 w-5" />
