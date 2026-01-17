@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,7 +13,7 @@ import { Navigation } from "@/components/navigation"
 import { ChatWidget } from "@/components/chat-widget"
 import Link from "next/link"
 import { createClient as createBrowserClient } from "@/lib/supabase/client"
-import { useEffect } from "react"
+import { calculateMatchScore } from "@/lib/matching"
 
 interface Participant {
   id: string
@@ -24,6 +24,8 @@ interface Participant {
   bio: string
   interests: string[]
   matchPercentage: number
+  event_ids: number[]
+  isCommonEvent?: boolean
   profileImage?: string
   isConnected?: boolean
   isIgnored?: boolean
@@ -31,6 +33,8 @@ interface Participant {
 
 export default function NetworkingPage() {
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [userInterests, setUserInterests] = useState<string[]>([])
+  const [userEventIds, setUserEventIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [connections, setConnections] = useState<Participant[]>([])
@@ -40,23 +44,62 @@ export default function NetworkingPage() {
   const supabase = createBrowserClient()
 
   useEffect(() => {
-    async function fetchParticipants() {
+    async function fetchData() {
       try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        // Fetch current user skills/interests
+        const { data: userData } = await supabase
+          .from('user_interests')
+          .select('master_tags(tag_name)')
+          .eq('user_id', user.id)
+        
+        const myInterests = userData?.map((t: any) => t.master_tags?.tag_name) || []
+        setUserInterests(myInterests)
+
+        // Fetch current user event registrations
+        const { data: myEvents } = await supabase
+          .from('event_registrations')
+          .select('event_id')
+          .eq('user_id', user.id)
+        
+        const myEventIds = myEvents?.map(e => e.event_id) || []
+        setUserEventIds(myEventIds)
+
+        // Fetch other participants
         const { data, error } = await supabase
           .from('networking_view')
           .select('*')
+          .neq('id', user.id) // Don't show myself
         
         if (error) throw error
         
-        setParticipants(data || [])
+        // Calculate dynamic scores and check for common events
+        const processedParticipants = (data || []).map((p: any) => {
+          const commonEvents = (p.event_ids || []).filter((id: number) => myEventIds.includes(id))
+          
+          return {
+            ...p,
+            matchPercentage: calculateMatchScore(myInterests, p.interests || []),
+            // If they share an event, we keep their location (which is their venue) 
+            // but we can flag it as a meeting point
+            isCommonEvent: commonEvents.length > 0
+          }
+        })
+
+        // Sort by match percentage
+        processedParticipants.sort((a, b) => b.matchPercentage - a.matchPercentage)
+        
+        setParticipants(processedParticipants)
       } catch (err) {
-        console.error("Error fetching participants:", err)
+        console.error("Error fetching networking data:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchParticipants()
+    fetchData()
   }, [])
 
   const currentParticipant = participants[currentIndex]
@@ -100,51 +143,78 @@ export default function NetworkingPage() {
       participant.interests.some((interest) => interest.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
-  const ParticipantCard = ({ participant }: { participant: Participant }) => (
-    <Card className="w-full max-w-md mx-auto border-border/40 overflow-hidden">
-      <CardHeader className="text-center pb-6 bg-muted/20">
-        <div className="relative mb-6">
-          <div className="h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto ring-4 ring-background">
-            <User className="h-16 w-16 text-primary/70" />
-          </div>
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2">
-            <Badge className="bg-primary/90 text-primary-foreground border-0 shadow-lg px-3 py-1">
-              <Sparkles className="h-3 w-3 mr-1.5" />
-              {participant.matchPercentage}% Match
-            </Badge>
-          </div>
-        </div>
-        <CardTitle className="text-2xl font-semibold mb-2">{participant.name}</CardTitle>
-        <CardDescription className="text-base space-y-1">
-          <div className="flex items-center justify-center gap-2">
-            <Briefcase className="h-4 w-4" />
-            <span className="font-medium text-foreground">{participant.title}</span>
-          </div>
-          <div className="font-medium text-muted-foreground">{participant.company}</div>
-          <div className="flex items-center justify-center gap-1.5 text-sm">
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{participant.location}</span>
-          </div>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6 pt-6">
-        <div>
-          <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider text-muted-foreground">About</h4>
-          <p className="text-sm leading-relaxed">{participant.bio}</p>
-        </div>
-        <div>
-          <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider text-muted-foreground">Shared Interests</h4>
-          <div className="flex flex-wrap gap-2">
-            {participant.interests.map((interest) => (
-              <Badge key={interest} variant="secondary" className="text-xs px-3 py-1 bg-primary/10 text-foreground border-border/40">
-                {interest}
+  const ParticipantCard = ({ participant }: { participant: Participant }) => {
+    const sharedInterests = (participant.interests || []).filter(i => 
+      userInterests.some(u => u.toLowerCase() === i.toLowerCase())
+    )
+    const otherInterests = (participant.interests || []).filter(i => 
+      !userInterests.some(u => u.toLowerCase() === i.toLowerCase())
+    )
+
+    return (
+      <Card className="w-full max-w-md mx-auto border-border/40 overflow-hidden shadow-2xl relative">
+        <CardHeader className="text-center pb-6 bg-muted/20">
+          <div className="relative mb-6">
+            <div className="h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto ring-4 ring-background overflow-hidden">
+              <User className="h-16 w-16 text-primary/70" />
+            </div>
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2">
+              <Badge className="bg-primary text-primary-foreground border-0 shadow-lg px-3 py-1 font-bold">
+                <Sparkles className="h-3 w-3 mr-1.5" />
+                {participant.matchPercentage}% Match
               </Badge>
-            ))}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+          <CardTitle className="text-3xl font-bold mb-2 tracking-tight">{participant.name}</CardTitle>
+          <CardDescription className="text-base space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <Briefcase className="h-4 w-4 text-primary/60" />
+              <span className="font-semibold text-foreground">{participant.title}</span>
+            </div>
+            <div className="font-medium text-muted-foreground">{participant.company}</div>
+            
+            {/* Highlighted Venue */}
+            <div className={`flex items-center justify-center gap-1.5 p-2 rounded-lg transition-colors ${participant.isCommonEvent ? 'bg-primary/10 border border-primary/20 mt-2' : ''}`}>
+              <MapPin className={`h-4 w-4 ${participant.isCommonEvent ? 'text-primary' : 'text-muted-foreground'}`} />
+              <span className={`text-sm ${participant.isCommonEvent ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+                {participant.isCommonEvent ? `Meet at: ${participant.location}` : participant.location}
+              </span>
+            </div>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6 pt-6">
+          <div className="bg-background/50 p-4 rounded-xl border border-border/50">
+            <h4 className="font-bold mb-4 text-[10px] uppercase tracking-[0.2em] text-primary flex items-center gap-2">
+              <Users className="h-3 w-3" />
+              Shared Interests
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {sharedInterests.length > 0 ? sharedInterests.map((interest) => (
+                <Badge key={interest} variant="default" className="text-[11px] px-3 py-1 bg-primary hover:bg-primary text-primary-foreground border-0 shadow-sm">
+                  {interest}
+                </Badge>
+              )) : (
+                <span className="text-[11px] text-muted-foreground italic">No direct interest matches</span>
+              )}
+            </div>
+          </div>
+
+          {(otherInterests.length > 0) && (
+            <div className="px-1">
+              <h4 className="font-bold mb-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">Other Expertise</h4>
+              <div className="flex flex-wrap gap-2">
+                {otherInterests.map((interest) => (
+                  <Badge key={interest} variant="outline" className="text-[11px] px-2.5 py-0.5 border-border/60 text-muted-foreground font-medium">
+                    {interest}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">

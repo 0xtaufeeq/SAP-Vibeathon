@@ -354,8 +354,8 @@ export async function registerForEvent(event_id: number) {
 
     if (!event) return { error: "Event not found" }
 
-    // For most events, we want registrations to be PENDING by default so organizers can review
-    const status = event.is_invite_only ? 'PENDING' : 'PENDING' // Defaulting to PENDING for both for now based on feedback
+    // If event is public, approve immediately. If invite-only, set to PENDING.
+    const status = event.is_invite_only ? 'PENDING' : 'APPROVED'
 
     const { data, error } = await supabase
       .from('event_registrations')

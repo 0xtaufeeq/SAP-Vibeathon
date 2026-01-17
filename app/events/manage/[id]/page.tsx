@@ -145,10 +145,13 @@ export default function ManageEventPage() {
           users:user_id ( name, email, linkedin_pdf_url )
         `)
         .eq('event_id', eventId)
-        .eq('status', 'APPROVED')
+        .or(`status.eq.APPROVED,and(status.eq.PENDING,event_id.eq.${eventId})`) // If public they might be pending due to the bug
       
-      if (confirmedError) throw confirmedError
-      setConfirmedAttendees(confirmedData || [])
+      // Filter confirmed: APPROVED or (PENDING and event is public)
+      const confirmed = (confirmedData || []).filter(r => 
+        r.status === 'APPROVED' || (event.is_invite_only === false && r.status === 'PENDING')
+      )
+      setConfirmedAttendees(confirmed)
 
       // Get current user permissions
       const { data: { user } } = await supabase.auth.getUser()
@@ -481,14 +484,18 @@ export default function ManageEventPage() {
               </CardContent>
             </Card>
 
-            {eventData.is_invite_only && (
+            {(eventData.is_invite_only || pendingRegistrations.length > 0) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Mail className="h-5 w-5" />
                     Attendee Requests
                   </CardTitle>
-                  <CardDescription>Review requests for this invite-only event.</CardDescription>
+                  <CardDescription>
+                    {eventData.is_invite_only 
+                      ? "Review requests for this invite-only event." 
+                      : "Pending registrations that need approval (even for public events)."}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">

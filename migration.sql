@@ -419,10 +419,14 @@ SELECT
     true as "isRecommended",
     EXISTS (
         SELECT 1 FROM public.event_registrations er 
-        WHERE er.event_id = e.id AND er.user_id = auth.uid() AND er.status = 'APPROVED'
+        WHERE er.event_id = e.id AND er.user_id = auth.uid() AND (er.status = 'APPROVED' OR (e.is_invite_only = false AND er.status = 'PENDING'))
     ) as "isInAgenda",
     COALESCE((
-        SELECT status::TEXT FROM public.event_registrations er 
+        SELECT CASE 
+            WHEN er.status = 'PENDING' AND e.is_invite_only = false THEN 'APPROVED'
+            ELSE er.status::TEXT
+        END
+        FROM public.event_registrations er 
         WHERE er.event_id = e.id AND er.user_id = auth.uid()
         LIMIT 1
     ), 'NONE') as "registrationStatus",
@@ -447,7 +451,13 @@ SELECT
     u.name,
     COALESCE(p.designation, 'Attendee') as title,
     COALESCE(p.company_name, s.institute_name, 'Event Partner') as company,
-    'Main Hall' as location,
+    COALESCE((
+        SELECT e.venue 
+        FROM public.event_registrations er
+        JOIN public.events e ON er.event_id = e.id
+        WHERE er.user_id = u.id
+        LIMIT 1
+    ), 'Main Hall') as location,
     u.bio,
     ARRAY(
         SELECT mt.tag_name 
@@ -455,7 +465,12 @@ SELECT
         JOIN public.master_tags mt ON ui.tag_id = mt.id
         WHERE ui.user_id = u.id
     ) as interests,
-    95 as "matchPercentage"
+    95 as "matchPercentage",
+    ARRAY(
+        SELECT er.event_id
+        FROM public.event_registrations er
+        WHERE er.user_id = u.id
+    ) as event_ids
 FROM public.users u
 LEFT JOIN public.student_profiles s ON u.id = s.user_id
 LEFT JOIN public.professional_profiles p ON u.id = p.user_id;

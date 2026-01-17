@@ -17,6 +17,7 @@ import { registerForEvent, applyToVolunteer } from "@/lib/actions"
 import { toast } from "sonner"
 import { useUser } from "@/hooks/use-supabase"
 import { useRouter } from "next/navigation"
+import { calculateMatchScore } from "@/lib/matching"
 
 interface Session {
   id: string
@@ -57,24 +58,51 @@ export default function ExplorePage() {
   useEffect(() => {
     async function fetchSessions() {
       try {
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        // Fetch current user skills/interests
+        let myInterests: string[] = []
+        if (user) {
+          const { data: userData } = await supabase
+            .from('user_interests')
+            .select('master_tags(tag_name)')
+            .eq('user_id', user.id)
+          
+          myInterests = userData?.map((t: any) => t.master_tags?.tag_name) || []
+        }
+
         const now = new Date().toISOString()
         const { data, error } = await supabase
           .from('agenda_view')
           .select('*')
-          .or(`end_time.gt.${now},start_time.gt.${now}`) // Show if it hasn't ended OR if it starts in the future
+          .or(`end_time.gt.${now},start_time.gt.${now}`)
         
         if (error) throw error
         
         // Map database view to UI component interface
-        const mappedSessions: Session[] = (data || []).map(s => ({
-          ...s,
-          tags: Array.isArray(s.tags) && s.tags.length > 0
+        const mappedSessions: Session[] = (data || []).map(s => {
+          const sessionTags = Array.isArray(s.tags) && s.tags.length > 0
             ? s.tags
-            : (s.track ? [s.track] : []),
-          level: (['Beginner', 'Intermediate', 'Advanced'][Math.floor(Math.random() * 3)]) as any,
-          matchPercentage: s.isRecommended ? 85 + Math.floor(Math.random() * 10) : undefined,
-          is_volunteer_open: true // Defaulted as most events have it open in schema
-        }))
+            : (s.track ? [s.track] : []);
+          
+          const matchScore = user ? calculateMatchScore(myInterests, sessionTags) : 10;
+
+          return {
+            ...s,
+            tags: sessionTags,
+            level: (['Beginner', 'Intermediate', 'Advanced'][Math.floor(Math.random() * 3)]) as any,
+            matchPercentage: matchScore,
+            isRecommended: matchScore >= 10, // Show everything with at least the minimum confidence
+            is_volunteer_open: true 
+          };
+        })
+
+        // Sort recommended sessions to the top
+        mappedSessions.sort((a, b) => {
+          if (a.isRecommended && !b.isRecommended) return -1;
+          if (!a.isRecommended && b.isRecommended) return 1;
+          return (b.matchPercentage || 0) - (a.matchPercentage || 0);
+        });
         
         setSessions(mappedSessions)
       } catch (err) {
