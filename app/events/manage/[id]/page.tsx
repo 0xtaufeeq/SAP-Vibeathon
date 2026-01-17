@@ -45,6 +45,7 @@ export default function ManageEventPage() {
     can_scan_qr: true,
     can_manage_tasks: true
   })
+  const [tagInput, setTagInput] = useState("")
 
   const supabase = createBrowserClient()
 
@@ -63,7 +64,22 @@ export default function ManageEventPage() {
         .single()
       
       if (eventError) throw eventError
-      setEventData(event)
+
+      // Fetch Event Tags
+      const { data: tagData, error: tagError } = await supabase
+        .from('event_tags')
+        .select('tag_id, master_tags(tag_name)')
+        .eq('event_id', eventId)
+
+      if (tagError) throw tagError
+      const tags = (tagData || [])
+        .map((t: any) => t.master_tags?.tag_name)
+        .filter(Boolean)
+
+      setEventData({
+        ...event,
+        tags
+      })
 
       // Fetch Team (Organizers)
       const { data: teamData, error: teamError } = await supabase
@@ -169,6 +185,27 @@ export default function ManageEventPage() {
     const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0')
     return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === "Enter" || e.key === " ") && tagInput.trim()) {
+      e.preventDefault()
+      const newTag = tagInput.trim()
+      if (!eventData.tags?.includes(newTag)) {
+        setEventData({
+          ...eventData,
+          tags: [...(eventData.tags || []), newTag]
+        })
+      }
+      setTagInput("")
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setEventData({
+      ...eventData,
+      tags: (eventData.tags || []).filter((t: string) => t !== tagToRemove)
+    })
   }
 
   const handleUpdateEvent = async (e: React.FormEvent) => {
@@ -342,6 +379,35 @@ export default function ManageEventPage() {
                       checked={eventData.is_invite_only} 
                       onCheckedChange={(v) => setEventData({...eventData, is_invite_only: v})} 
                     />
+                  </div>
+
+                  <div className="space-y-4 pt-2 border-t">
+                    <Label className="text-base">Event Tags</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(eventData.tags || []).map((tag: string) => (
+                        <Badge key={tag} variant="secondary" className="gap-1 px-3 py-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            className="ml-1 hover:text-destructive transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Type a tag and press Space or Enter..."
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={handleTagKeyDown}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Add tags to improve discoverability in Explore.
+                      </p>
+                    </div>
                   </div>
 
                   <Button type="submit" disabled={saving}>

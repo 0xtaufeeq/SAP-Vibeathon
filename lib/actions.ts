@@ -16,6 +16,7 @@ export async function createEvent(eventData: {
   parent_event_id?: number
   is_invite_only?: boolean
   is_volunteer_open?: boolean
+  tags?: string[]
 }) {
   try {
     const supabase = createClient()
@@ -37,10 +38,11 @@ export async function createEvent(eventData: {
       return { error: "Only professionals can create events. Please update your profile." }
     }
 
+    const { tags, ...rest } = eventData
     const { data, error } = await supabase
       .from('events')
       .insert({
-        ...eventData,
+        ...rest,
         owner_id: user.id
       })
       .select()
@@ -49,6 +51,43 @@ export async function createEvent(eventData: {
     if (error) {
       console.error('Error creating event:', error)
       return { error: `Failed to create event: ${error.message}` }
+    }
+
+    const getOrCreateTagId = async (tagName: string) => {
+      const insertResult = await supabase
+        .from('master_tags')
+        .insert({ tag_name: tagName }, { ignoreDuplicates: true })
+
+      if (insertResult.error && insertResult.error.code !== '23505') {
+        console.error('Error inserting tag:', insertResult.error)
+      }
+
+      const { data: tagRow, error: tagError } = await supabase
+        .from('master_tags')
+        .select('id')
+        .eq('tag_name', tagName)
+        .maybeSingle()
+
+      if (tagError) {
+        console.error('Error selecting tag:', tagError)
+        return null
+      }
+
+      return tagRow?.id || null
+    }
+
+    // Handle tags if present
+    if (tags && tags.length > 0) {
+      const cleanedTags = Array.from(new Set(tags.map(t => t.trim()).filter(Boolean)))
+
+      for (const tagName of cleanedTags) {
+        const tagId = await getOrCreateTagId(tagName)
+        if (!tagId) continue
+
+        await supabase
+          .from('event_tags')
+          .insert({ event_id: data.id, tag_id: tagId })
+      }
     }
 
     revalidatePath('/dashboard')
@@ -219,25 +258,76 @@ export async function updateEventDetails(event_id: number, updates: any) {
 
   if (!user) throw new Error("Not authenticated")
 
-  // Check ownership
+  // Check ownership or organizer role
   const { data: event } = await supabase
     .from('events')
     .select('owner_id')
     .eq('id', event_id)
     .single()
 
-  if (event?.owner_id !== user.id) {
-    throw new Error("Only owners can update event details")
+  const { data: organizer } = await supabase
+    .from('event_team')
+    .select('id')
+    .eq('event_id', event_id)
+    .eq('user_id', user.id)
+    .eq('role', 'ORGANIZER')
+    .maybeSingle()
+
+  if (event?.owner_id !== user.id && !organizer) {
+    throw new Error("Only owners or organizers can update event details")
   }
+
+  const { tags, ...eventUpdates } = updates
 
   const { data, error } = await supabase
     .from('events')
-    .update(updates)
+    .update(eventUpdates)
     .eq('id', event_id)
     .select()
     .single()
 
   if (error) throw new Error(error.message)
+
+  if (Array.isArray(tags)) {
+    const cleanedTags = Array.from(new Set(tags.map((t: string) => t.trim()).filter(Boolean)))
+
+    await supabase
+      .from('event_tags')
+      .delete()
+      .eq('event_id', event_id)
+
+    const getOrCreateTagId = async (tagName: string) => {
+      const insertResult = await supabase
+        .from('master_tags')
+        .insert({ tag_name: tagName }, { ignoreDuplicates: true })
+
+      if (insertResult.error && insertResult.error.code !== '23505') {
+        console.error('Error inserting tag:', insertResult.error)
+      }
+
+      const { data: tagRow, error: tagError } = await supabase
+        .from('master_tags')
+        .select('id')
+        .eq('tag_name', tagName)
+        .maybeSingle()
+
+      if (tagError) {
+        console.error('Error selecting tag:', tagError)
+        return null
+      }
+
+      return tagRow?.id || null
+    }
+
+    for (const tagName of cleanedTags) {
+      const tagId = await getOrCreateTagId(tagName)
+      if (!tagId) continue
+
+      await supabase
+        .from('event_tags')
+        .insert({ event_id, tag_id: tagId })
+    }
+  }
 
   revalidatePath('/explore')
   revalidatePath('/dashboard')

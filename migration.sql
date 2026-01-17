@@ -319,6 +319,9 @@
     CREATE POLICY "Master tags are viewable by everyone" ON public.master_tags
     FOR SELECT USING (true);
 
+    CREATE POLICY "Authenticated users can add master tags" ON public.master_tags
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
     -- User Interests: Viewable by everyone, owners can update
     CREATE POLICY "User interests are viewable by everyone" ON public.user_interests
     FOR SELECT USING (true);
@@ -335,6 +338,10 @@
         EXISTS (
             SELECT 1 FROM public.events
             WHERE id = public.event_tags.event_id AND (owner_id = auth.uid())
+        ) OR
+        EXISTS (
+            SELECT 1 FROM public.event_team
+            WHERE event_id = public.event_tags.event_id AND user_id = auth.uid() AND role = 'ORGANIZER'
         )
     );
 

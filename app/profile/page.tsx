@@ -160,6 +160,7 @@ export default function ProfilePage() {
           events (
             title,
             start_time,
+            end_time,
             venue
           )
         `)
@@ -192,14 +193,17 @@ export default function ProfilePage() {
             ticket_hash: reg.ticket_hash,
             event_title: reg.events.title,
             start_time: reg.events.start_time,
+            end_time: reg.events.end_time, // Added end_time
             venue: reg.events.venue,
             is_checked_in: reg.is_checked_in,
             qr_code: qrCodeDataUrl
           }
         }))
-        setRegistrations(regsWithQr)
+        // Filter out events that have already ended
+        const activeRegs = regsWithQr.filter((reg: any) => new Date(reg.end_time) > new Date())
+        setRegistrations(activeRegs)
         
-        // Calculate basic stats from registrations
+        // Calculate basic stats from registrations (from all registrations, not just active ones)
         const attended = data.filter((r: any) => r.is_checked_in).length
         
         // Fetch organized events count

@@ -61,13 +61,16 @@ export default function ExplorePage() {
         const { data, error } = await supabase
           .from('agenda_view')
           .select('*')
-          .gt('end_time', now) // Only show events that haven't ended yet
+          .or(`end_time.gt.${now},start_time.gt.${now}`) // Show if it hasn't ended OR if it starts in the future
         
         if (error) throw error
         
         // Map database view to UI component interface
         const mappedSessions: Session[] = (data || []).map(s => ({
           ...s,
+          tags: Array.isArray(s.tags) && s.tags.length > 0
+            ? s.tags
+            : (s.track ? [s.track] : []),
           level: (['Beginner', 'Intermediate', 'Advanced'][Math.floor(Math.random() * 3)]) as any,
           matchPercentage: s.isRecommended ? 85 + Math.floor(Math.random() * 10) : undefined,
           is_volunteer_open: true // Defaulted as most events have it open in schema
@@ -137,6 +140,19 @@ export default function ExplorePage() {
   const myAgendaSessions = filteredSessions.filter(s => s.isInAgenda)
   const allSessions = filteredSessions
 
+  const formatDuration = (start: string, end: string) => {
+    const startTime = new Date(start).getTime()
+    const endTime = new Date(end).getTime()
+
+    if (Number.isNaN(startTime) || Number.isNaN(endTime)) return "Duration TBD"
+    if (endTime <= startTime) return "Duration TBD"
+
+    const minutes = Math.round((endTime - startTime) / 60000)
+    if (minutes < 60) return `${minutes} min`
+    const hours = Math.round((minutes / 60) * 10) / 10
+    return `${hours} hrs`
+  }
+
   const SessionCard = ({ session }: { session: Session }) => (
     <Card className="hover:border-primary/50 transition-colors">
       <CardHeader className="pb-3">
@@ -161,7 +177,7 @@ export default function ExplorePage() {
                     minute: '2-digit',
                     timeZone: session.timezone || 'Asia/Kolkata',
                     timeZoneName: 'short'
-                  })} ({session.duration})
+                  })} ({formatDuration(session.start_time, session.end_time)})
                 </span>
                 <span className="flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
@@ -243,13 +259,20 @@ export default function ExplorePage() {
           <span className="text-sm text-muted-foreground">• {session.speakerTitle}</span>
         </div>
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{session.description}</p>
-        <div className="flex flex-wrap gap-1">
-          {session.tags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-        </div>
+        {session.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {session.tags.slice(0, 5).map((tag) => (
+              <Badge key={tag} variant="default" className="text-[11px] px-2 py-0.5">
+                {tag}
+              </Badge>
+            ))}
+            {session.tags.length > 5 && (
+              <Badge variant="outline" className="text-[11px] px-2 py-0.5">
+                +{session.tags.length - 5} more
+              </Badge>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

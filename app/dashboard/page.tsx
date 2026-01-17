@@ -336,7 +336,7 @@ export default function DashboardPage() {
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
-                        {new Date() > new Date(vEvent.end_time) && (
+                        {new Date() > new Date(vEvent.end_time) && new Date() > new Date(vEvent.start_time) && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -347,7 +347,7 @@ export default function DashboardPage() {
                           </Button>
                         )}
                         <Badge variant={isEventActive(vEvent.start_time, vEvent.end_time) ? "default" : "outline"}>
-                          {isEventActive(vEvent.start_time, vEvent.end_time) ? 'Active Now' : (new Date() > new Date(vEvent.end_time) ? 'Ended' : 'Upcoming')}
+                          {isEventActive(vEvent.start_time, vEvent.end_time) ? 'Active Now' : (new Date() > new Date(vEvent.end_time) && new Date() > new Date(vEvent.start_time) ? 'Ended' : 'Upcoming')}
                         </Badge>
                       </div>
                     </div>
@@ -488,9 +488,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-3">
-                {upcomingSessions.filter(s => new Date(s.end_time) > new Date()).length > 0 ? (
+                {upcomingSessions.filter(s => new Date(s.end_time) > new Date() || new Date(s.start_time) > new Date()).length > 0 ? (
                   upcomingSessions
-                    .filter(s => new Date(s.end_time) > new Date())
+                    .filter(s => new Date(s.end_time) > new Date() || new Date(s.start_time) > new Date())
                     .map((session, index) => (
                     <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-muted/30 border border-border/40 transition-all duration-200 hover:bg-muted/50 cursor-pointer group">
                       <div className="flex flex-col items-center gap-1 min-w-[100px]">
@@ -548,7 +548,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Conducted Events Section */}
-          {upcomingSessions.filter(s => new Date(s.end_time) <= new Date()).length > 0 && (
+          {upcomingSessions.filter(s => new Date(s.end_time) <= new Date() && new Date(s.start_time) <= new Date()).length > 0 && (
             <Card className="border-border/40 bg-muted/5">
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
@@ -561,7 +561,7 @@ export default function DashboardPage() {
               <CardContent className="pt-0">
                 <div className="space-y-3">
                   {upcomingSessions
-                    .filter(s => new Date(s.end_time) <= new Date())
+                    .filter(s => new Date(s.end_time) <= new Date() && new Date(s.start_time) <= new Date())
                     .map((session, index) => (
                     <div 
                       key={index} 

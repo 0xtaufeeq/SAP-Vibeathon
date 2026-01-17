@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Navigation } from "@/components/navigation"
 import { createEvent, addOrganizer } from "@/lib/actions"
 import { toast } from "sonner"
-import { Calendar, MapPin, Users, Plus, Loader2, Save, Trash2, Mail, Check, ShieldCheck, Lock } from "lucide-react"
+import { Calendar, MapPin, Users, Plus, Loader2, Save, Trash2, Mail, Check, ShieldCheck, Lock, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
@@ -30,7 +30,9 @@ export default function CreateEventPage() {
     timezone: "Asia/Kolkata",
     is_volunteer_open: true,
     is_invite_only: false,
+    tags: [] as string[]
   })
+  const [tagInput, setTagInput] = useState("")
 
   // Common Timezones
   const timezones = [
@@ -48,6 +50,27 @@ export default function CreateEventPage() {
   const [addingOrganizer, setAddingOrganizer] = useState(false)
   const [team, setTeam] = useState<string[]>([])
 
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === "Enter" || e.key === " ") && tagInput.trim()) {
+      e.preventDefault()
+      const newTag = tagInput.trim()
+      if (!formData.tags.includes(newTag)) {
+        setFormData({
+          ...formData,
+          tags: [...formData.tags, newTag]
+        })
+      }
+      setTagInput("")
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags.filter(t => t !== tagToRemove)
+    })
+  }
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -56,8 +79,6 @@ export default function CreateEventPage() {
       // Since datetime-local gives "YYYY-MM-DDTHH:mm", we can treat it as the target time
       const result = await createEvent({
         ...formData,
-        // The backend handles TIMESTAMPTZ, so we just need to send a ISO string that includes the offset
-        // Or we send the UTC converted version.
         start_time: new Date(formData.start_time).toISOString(),
         end_time: new Date(formData.end_time).toISOString(),
       })
@@ -221,6 +242,35 @@ export default function CreateEventPage() {
                       checked={formData.is_invite_only} 
                       onCheckedChange={(v) => setFormData({...formData, is_invite_only: v})} 
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
+                  <Label className="text-base">Event Tags</Label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {formData.tags.map((tag, index) => (
+                      <Badge key={index} variant="secondary" className="gap-1 px-3 py-1">
+                        {tag}
+                        <button 
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="ml-1 hover:text-destructive transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Type a tag and press Space or Enter..."
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Add tags like AI, Frontend, Networking to help people find your event.
+                    </p>
                   </div>
                 </div>
 
