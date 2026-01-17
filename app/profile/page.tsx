@@ -29,7 +29,8 @@ import {
   Award,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X
 } from "lucide-react"
 import { useUser } from "@/hooks/use-supabase"
 import { useRouter } from "next/navigation"
@@ -74,7 +75,7 @@ export default function ProfilePage() {
   const [stats, setStats] = useState({
     attended: 0,
     connections: 0,
-    joined: 0,
+    organized: 0,
     volunteered: 0
   })
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -93,7 +94,9 @@ export default function ProfilePage() {
     college: "",
     degree: "",
     year_of_study: "",
+    skills: [] as string[]
   })
+  const [skillInput, setSkillInput] = useState("")
 
   useEffect(() => {
     if (!userLoading) {
@@ -113,10 +116,32 @@ export default function ProfilePage() {
           college: user.user_metadata.college || "",
           degree: user.user_metadata.degree || "",
           year_of_study: user.user_metadata.year_of_study || "",
+          skills: user.user_metadata.skills || []
         })
       }
     }
   }, [user, userLoading, router])
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === "Enter" || e.key === " ") && skillInput.trim()) {
+      e.preventDefault()
+      const newSkill = skillInput.trim()
+      if (!editForm.skills.includes(newSkill)) {
+        setEditForm({
+          ...editForm,
+          skills: [...editForm.skills, newSkill]
+        })
+      }
+      setSkillInput("")
+    }
+  }
+
+  const removeSkill = (skillToRemove: string) => {
+    setEditForm({
+      ...editForm,
+      skills: editForm.skills.filter(s => s !== skillToRemove)
+    })
+  }
 
   const loadUserProfile = async () => {
     if (!user) return
@@ -176,8 +201,13 @@ export default function ProfilePage() {
         
         // Calculate basic stats from registrations
         const attended = data.filter((r: any) => r.is_checked_in).length
-        const joined = data.length
         
+        // Fetch organized events count
+        const { count: organizedCount } = await supabase
+          .from('events')
+          .select('*', { count: 'exact', head: true })
+          .eq('owner_id', user.id)
+
         // Fetch connections count
         const { count: connectCount } = await supabase
           .from('user_connections')
@@ -195,7 +225,7 @@ export default function ProfilePage() {
 
         setStats({
           attended: attended,
-          joined: joined,
+          organized: organizedCount || 0,
           connections: connectCount || 0,
           volunteered: volunteerCount || 0
         })
@@ -453,6 +483,34 @@ export default function ProfilePage() {
                       </div>
                     </>
                   )}
+                  
+                  <div className="space-y-4 pt-4 border-t">
+                    <Label className="text-base">Skills & Interests</Label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {editForm.skills.map((skill, index) => (
+                        <Badge key={index} variant="secondary" className="gap-1 px-3 py-1">
+                          {skill}
+                          <button 
+                            onClick={() => removeSkill(skill)}
+                            className="ml-1 hover:text-destructive transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Type a skill and press Space or Enter..."
+                        value={skillInput}
+                        onChange={(e) => setSkillInput(e.target.value)}
+                        onKeyDown={handleSkillKeyDown}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Press Space or Enter to add a skill. Click the X to remove.
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="flex justify-end gap-2">
@@ -606,8 +664,8 @@ export default function ProfilePage() {
                     <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Connections Made</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/30">
-                    <p className="text-3xl font-bold text-primary">{stats.joined}</p>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Events Joined</p>
+                    <p className="text-3xl font-bold text-primary">{stats.organized}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Events Organized</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/30">
                     <p className="text-3xl font-bold text-primary">{stats.volunteered}</p>

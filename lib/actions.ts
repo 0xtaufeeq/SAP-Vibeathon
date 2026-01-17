@@ -489,25 +489,78 @@ export async function updateVolunteerStatus(
 /**
  * Secure QR Check-in: Process check-in via ticket hash
  */
-export async function processCheckIn(ticket_hash: string) {
+export async function processCheckIn(ticket_hash: string, event_id?: number) {
   const supabase = createClient()
   const { data: { user: scanner } } = await supabase.auth.getUser()
 
   if (!scanner) throw new Error("Not authenticated")
 
   // 1. Identify registration and event
-  const { data: registration, error: regError } = await supabase
-    .from('event_registrations')
-    .select('reg_id, event_id, is_checked_in')
-    .eq('ticket_hash', ticket_hash)
-    .single()
+  let registrations: any[] = []
+  
+  if (ticket_hash.length >= 36) {
+    // Exact match for full UUID
+    const { data, error } = await supabase
+      .from('event_registrations')
+      .select(`
+        reg_id, 
+        event_id, 
+        is_checked_in, 
+        users:user_id(name),
+        events:event_id(end_time, title)
+      `)
+      .eq('ticket_hash', ticket_hash)
 
-  if (regError || !registration) {
+    if (error) {
+      console.error('Registration exact query error:', error)
+      throw new Error("Error searching for registration")
+    }
+    registrations = data || []
+  } else if (event_id) {
+    // Prefix search within event for short codes (casted in JS to handle UUID)
+    const { data, error } = await supabase
+      .from('event_registrations')
+      .select(`
+        reg_id, 
+        event_id, 
+        is_checked_in, 
+        ticket_hash, 
+        users:user_id(name),
+        events:event_id(end_time, title)
+      `)
+      .eq('event_id', event_id)
+
+    if (error) {
+      console.error('Registration event list query error:', error)
+      throw new Error("Error searching for registration in event")
+    }
+
+    registrations = (data || []).filter(r => 
+      r.ticket_hash.toLowerCase().startsWith(ticket_hash.toLowerCase())
+    )
+  } else {
+    throw new Error("Event selection required for short code check-in")
+  }
+
+  if (registrations.length === 0) {
     throw new Error("Invalid ticket hash")
   }
 
+  if (registrations.length > 1) {
+    throw new Error("Ambiguous code. Please enter more characters.")
+  }
+
+  const registration = registrations[0]
+
+  // Check if event has ended
+  const eventEndTime = registration.events?.end_time
+  if (eventEndTime && new Date() > new Date(eventEndTime)) {
+    throw new Error(`Check-in for "${registration.events?.title}" has closed as the event has ended.`)
+  }
+
   if (registration.is_checked_in) {
-    throw new Error("User is already checked in")
+    const userName = (registration.users as any)?.name || "Attendee"
+    throw new Error(`${userName} is already checked in`)
   }
 
   // 2. Verify scanner permissions
@@ -532,7 +585,7 @@ export async function processCheckIn(ticket_hash: string) {
       checked_in_by: scanner.id
     })
     .eq('reg_id', registration.reg_id)
-    .select()
+    .select('reg_id, is_checked_in, checked_in_at, users:user_id(name)')
     .single()
 
   if (error) {
@@ -540,7 +593,13 @@ export async function processCheckIn(ticket_hash: string) {
     throw new Error(error.message)
   }
 
-  return { success: true, data }
+  return { 
+    success: true, 
+    data: {
+      ...data,
+      userName: (data.users as any)?.name || "Attendee"
+    }
+  }
 }
 
 /**

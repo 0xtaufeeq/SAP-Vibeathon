@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,8 @@ import { Navigation } from "@/components/navigation"
 import { useUser } from "@/hooks/use-supabase"
 import { processCheckIn } from "@/lib/actions"
 import { toast } from "sonner"
-import { Scan, ArrowLeft, Loader2, CheckCircle, XCircle } from "lucide-react"
+import { Scan, ArrowLeft, Loader2, CheckCircle, XCircle, Camera, StopCircle } from "lucide-react"
+import { Html5QrcodeScanner } from "html5-qrcode"
 
 export default function VolunteerCheckInPage() {
   const searchParams = useSearchParams()
@@ -21,6 +22,8 @@ export default function VolunteerCheckInPage() {
   const [ticketHash, setTicketHash] = useState("")
   const [loading, setLoading] = useState(false)
   const [lastCheckIn, setLastCheckIn] = useState<any>(null)
+  const [isScanning, setIsScanning] = useState(false)
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null)
 
   useEffect(() => {
     if (!eventId) {
@@ -28,19 +31,65 @@ export default function VolunteerCheckInPage() {
     }
   }, [eventId, router])
 
-  const handleCheckIn = async (e?: React.FormEvent) => {
+  useEffect(() => {
+    if (isScanning && !scannerRef.current) {
+      const scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        /* verbose= */ false
+      )
+      
+      scanner.render(onScanSuccess, onScanFailure)
+      scannerRef.current = scanner
+    }
+
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(error => {
+          console.error("Failed to clear scanner", error)
+        })
+        scannerRef.current = null
+      }
+    }
+  }, [isScanning])
+
+  function onScanSuccess(decodedText: string) {
+    let hash = decodedText
+    try {
+      const data = JSON.parse(decodedText)
+      if (data.ticketHash) {
+        hash = data.ticketHash
+      }
+    } catch (e) {
+      // Use raw text if not JSON
+    }
+
+    setTicketHash(hash)
+    setIsScanning(false)
+    toast.success("Code scanned!")
+    performCheckIn(hash)
+  }
+
+  function onScanFailure(error: any) {
+    // Silently ignore scan failures (e.g., no QR in frame)
+  }
+
+  const handleManualCheckIn = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!ticketHash || !eventId || !user) return
+    performCheckIn(ticketHash)
+  }
 
+  const performCheckIn = async (hash: string) => {
     setLoading(true)
     try {
-      const result = await processCheckIn(ticketHash)
+      const result = await processCheckIn(hash, eventId ? Number(eventId) : undefined)
       
       if (result.success) {
         toast.success("Check-in successful!")
         setLastCheckIn({
           success: true,
-          name: "Attendee", // The userName isn't returned by current processCheckIn Implementation
+          name: result.data.userName,
           time: new Date().toLocaleTimeString()
         })
         setTicketHash("")
@@ -74,18 +123,39 @@ export default function VolunteerCheckInPage() {
 
         <Card className="border-primary/20">
           <CardHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Scan className="h-6 w-6 text-primary" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Scan className="h-6 w-6 text-primary" />
+                </div>
+                <CardTitle>Attendee Check-in</CardTitle>
               </div>
-              <CardTitle>Attendee Check-in</CardTitle>
+              <Button 
+                variant={isScanning ? "destructive" : "outline"}
+                size="sm"
+                onClick={() => setIsScanning(!isScanning)}
+                className="gap-2"
+              >
+                {isScanning ? (
+                  <StopCircle className="h-4 w-4" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
+                {isScanning ? "Stop Scanner" : "Scan QR Code"}
+              </Button>
             </div>
             <CardDescription>
               Enter the ticket hash or scan the attendee's QR code to verify their registration.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCheckIn} className="space-y-4">
+            {isScanning && (
+              <div className="mb-6 overflow-hidden rounded-xl border-2 border-primary/20 bg-black">
+                <div id="reader" className="w-full"></div>
+              </div>
+            )}
+
+            <form onSubmit={handleManualCheckIn} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="ticketHash">Ticket Hash / Code</Label>
                 <div className="flex gap-2">
@@ -95,7 +165,7 @@ export default function VolunteerCheckInPage() {
                     value={ticketHash}
                     onChange={(e) => setTicketHash(e.target.value)}
                     className="font-mono"
-                    autoFocus
+                    autoFocus={!isScanning}
                   />
                   <Button type="submit" disabled={loading || !ticketHash}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Users, MessageSquare, TrendingUp, Clock, Star, Scan, CheckCircle2, Plus, Settings, ShieldCheck, Mail } from "lucide-react"
+import { Calendar, Users, MessageSquare, TrendingUp, Clock, Star, Scan, CheckCircle2, Plus, Settings, ShieldCheck, Mail, Trash2 } from "lucide-react"
 import { Navigation } from "@/components/navigation"
 import { ChatWidget } from "@/components/chat-widget"
 import Link from "next/link"
@@ -22,14 +22,29 @@ export default function DashboardPage() {
   const [stats, setStats] = useState({
     sessions: 0,
     connections: 0,
-    messages: 0,
-    matchQuality: 92
+    messages: 0
   })
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([])
   const [volunteerEvents, setVolunteerEvents] = useState<any[]>([])
   const [pendingInvites, setPendingInvites] = useState<any[]>([])
+  const [dismissedEvents, setDismissedEvents] = useState<number[]>([])
   const router = useRouter()
   const supabase = createBrowserClient()
+
+  useEffect(() => {
+    // Load dismissed events from localStorage
+    const saved = localStorage.getItem('dismissed_volunteer_events')
+    if (saved) {
+      setDismissedEvents(JSON.parse(saved))
+    }
+  }, [])
+
+  const handleDismissEvent = (eventId: number) => {
+    const updated = [...dismissedEvents, eventId]
+    setDismissedEvents(updated)
+    localStorage.setItem('dismissed_volunteer_events', JSON.stringify(updated))
+    toast.success("Event removed from console")
+  }
 
   useEffect(() => {
     if (!loading && !user) {
@@ -126,11 +141,12 @@ export default function DashboardPage() {
     }
   }
 
-  const isEventActive = (startTime: string) => {
+  const isEventActive = (startTime: string, endTime: string) => {
     const start = new Date(startTime).getTime()
+    const end = new Date(endTime).getTime()
     const now = new Date().getTime()
-    // Available 30 mins before start
-    return now >= (start - 30 * 60 * 1000)
+    // Available 30 mins before start until end of event
+    return now >= (start - 30 * 60 * 1000) && now <= end
   }
 
   const fetchDashboardData = async () => {
@@ -215,7 +231,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
           <Card className="border-border/40 transition-all duration-200 hover:bg-muted/30 cursor-pointer">
             <CardContent className="p-6">
               <div className="flex flex-col gap-3">
@@ -260,21 +276,6 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          
-          <Card className="border-border/40 transition-all duration-200 hover:bg-muted/30 cursor-pointer">
-            <CardContent className="p-6">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <TrendingUp className="h-5 w-5 text-primary/70" />
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rate</span>
-                </div>
-                <div>
-                  <p className="text-3xl font-semibold mb-1">{stats.matchQuality}%</p>
-                  <p className="text-sm text-muted-foreground">Match quality</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Pending Organizer Invitations */}
@@ -315,15 +316,17 @@ export default function DashboardPage() {
         )}
 
         {/* Volunteer Console Section */}
-        {volunteerEvents.length > 0 && (
+        {volunteerEvents.filter(v => !dismissedEvents.includes(v.event_id)).length > 0 && (
           <div className="mb-12 animate-fade-in-up">
             <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-primary" />
               {volunteerEvents.some(v => v.role === 'ORGANIZER') ? 'Organizer QR Scanning Console' : 'Volunteer Console'}
             </h2>
             <div className="grid md:grid-cols-2 gap-6">
-              {volunteerEvents.map((vEvent) => (
-                <Card key={vEvent.id} className="border-primary/20 bg-primary/5">
+              {volunteerEvents
+                .filter(v => !dismissedEvents.includes(v.event_id))
+                .map((vEvent) => (
+                <Card key={vEvent.id} className="border-primary/20 bg-primary/5 relative group/card">
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -332,9 +335,21 @@ export default function DashboardPage() {
                           Role: <span className="capitalize font-medium text-primary">{vEvent.role.toLowerCase()}</span>
                         </CardDescription>
                       </div>
-                      <Badge variant={isEventActive(vEvent.start_time) ? "default" : "outline"}>
-                        {isEventActive(vEvent.start_time) ? 'Active Now' : 'Upcoming'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {new Date() > new Date(vEvent.end_time) && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={() => handleDismissEvent(vEvent.event_id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Badge variant={isEventActive(vEvent.start_time, vEvent.end_time) ? "default" : "outline"}>
+                          {isEventActive(vEvent.start_time, vEvent.end_time) ? 'Active Now' : (new Date() > new Date(vEvent.end_time) ? 'Ended' : 'Upcoming')}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -356,12 +371,16 @@ export default function DashboardPage() {
                     
                     {vEvent.can_scan_qr ? (
                       <Button 
-                        disabled={!isEventActive(vEvent.start_time)}
+                        disabled={!isEventActive(vEvent.events.start_time, vEvent.events.end_time)}
                         className="w-full h-12 text-lg font-medium group transition-all"
                         onClick={() => router.push(`/volunteer/check-in?eventId=${vEvent.event_id}`)}
                       >
                         <Scan className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
-                        {isEventActive(vEvent.start_time) ? 'Open Check-in Scanner' : 'Available at Event Start'}
+                        {isEventActive(vEvent.events.start_time, vEvent.events.end_time) 
+                          ? 'Open Check-in Scanner' 
+                          : (new Date() > new Date(vEvent.events.end_time) 
+                              ? 'Event Ended' 
+                              : 'Available at Event Start')}
                       </Button>
                     ) : (
                       <div className="p-4 border border-dashed rounded-lg text-center bg-muted/20">
@@ -452,78 +471,150 @@ export default function DashboardPage() {
         </div>
 
         {/* Today's Schedule Preview */}
-        <Card className="border-border/40">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle className="text-2xl font-semibold">Today&apos;s Schedule</CardTitle>
-              </div>
-              <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
-                <Link href="/explore">View All</Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="space-y-3">
-              {upcomingSessions.length > 0 ? (
-                upcomingSessions.map((session, index) => (
-                  <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-muted/30 border border-border/40 transition-all duration-200 hover:bg-muted/50 cursor-pointer group">
-                    <div className="flex flex-col items-center gap-1 min-w-[100px]">
-                      <span className="text-lg font-semibold text-primary">
-                        {new Date(session.start_time).toLocaleTimeString('en-US', { 
-                          hour: '2-digit', 
-                          minute: '2-digit',
-                          timeZone: session.timezone || 'Asia/Kolkata'
-                        })}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground font-medium uppercase">
-                        {new Intl.DateTimeFormat('en-US', {
-                          timeZone: session.timezone || 'Asia/Kolkata',
-                          timeZoneName: 'short'
-                        }).format(new Date(session.start_time)).split(' ').pop()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-base mb-1 group-hover:text-primary transition-colors">
-                        {session.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {session.location} <span className="mx-1">·</span> {session.speaker}
-                      </p>
-                    </div>
-                    {(session.isOrganizer || session.owner_id === user?.id) ? (
-                      <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        className="flex-shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          router.push(`/events/manage/${session.id}`)
-                        }}
-                      >
-                        <Settings className="h-4 w-4 mr-1" />
-                        Manage
-                      </Button>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-green-500/10">
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        <span className="text-[10px] font-semibold text-green-500 uppercase mt-0.5">Joined</span>
-                      </div>
-                    )}
+        <div className="space-y-6">
+          <Card className="border-border/40">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-primary" />
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                  <p>No sessions scheduled for today</p>
+                  <CardTitle className="text-2xl font-semibold">Today&apos;s Schedule</CardTitle>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
+                  <Link href="/explore">View All</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                {upcomingSessions.filter(s => new Date(s.end_time) > new Date()).length > 0 ? (
+                  upcomingSessions
+                    .filter(s => new Date(s.end_time) > new Date())
+                    .map((session, index) => (
+                    <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-muted/30 border border-border/40 transition-all duration-200 hover:bg-muted/50 cursor-pointer group">
+                      <div className="flex flex-col items-center gap-1 min-w-[100px]">
+                        <span className="text-lg font-semibold text-primary">
+                          {new Date(session.start_time).toLocaleTimeString('en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            timeZone: session.timezone || 'Asia/Kolkata'
+                          })}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase">
+                          {new Intl.DateTimeFormat('en-US', {
+                            timeZone: session.timezone || 'Asia/Kolkata',
+                            timeZoneName: 'short'
+                          }).format(new Date(session.start_time)).split(' ').pop()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-base mb-1 group-hover:text-primary transition-colors">
+                          {session.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {session.location} <span className="mx-1">·</span> {session.speaker}
+                        </p>
+                      </div>
+                      {(session.isOrganizer || session.owner_id === user?.id) ? (
+                        <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          className="flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/events/manage/${session.id}`)
+                          }}
+                        >
+                          <Settings className="h-4 w-4 mr-1" />
+                          Manage
+                        </Button>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-green-500/10">
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          <span className="text-[10px] font-semibold text-green-500 uppercase mt-0.5">Joined</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                    <p>No active sessions scheduled</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Conducted Events Section */}
+          {upcomingSessions.filter(s => new Date(s.end_time) <= new Date()).length > 0 && (
+            <Card className="border-border/40 bg-muted/5">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <CardTitle className="text-2xl font-semibold text-muted-foreground">Conducted Events</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  {upcomingSessions
+                    .filter(s => new Date(s.end_time) <= new Date())
+                    .map((session, index) => (
+                    <div 
+                      key={index} 
+                      className="flex items-start gap-4 p-4 rounded-xl bg-muted/10 border border-border/20 grayscale opacity-60 transition-all duration-200 hover:grayscale-0 hover:opacity-100 cursor-pointer group"
+                      onClick={() => router.push(`/explore`)} // Or specific event details if available
+                    >
+                      <div className="flex flex-col items-center gap-1 min-w-[100px]">
+                        <span className="text-lg font-semibold text-muted-foreground">
+                          {new Date(session.start_time).toLocaleTimeString('en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            timeZone: session.timezone || 'Asia/Kolkata'
+                          })}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase">
+                          {new Intl.DateTimeFormat('en-US', {
+                            timeZone: session.timezone || 'Asia/Kolkata',
+                            timeZoneName: 'short'
+                          }).format(new Date(session.start_time)).split(' ').pop()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-base mb-1 text-muted-foreground group-hover:text-primary transition-colors">
+                          {session.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {session.location} <span className="mx-1">·</span> {session.speaker}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(session.isOrganizer || session.owner_id === user?.id) && (
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="flex-shrink-0 grayscale-0 opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/events/manage/${session.id}`)
+                            }}
+                          >
+                            <Settings className="h-4 w-4 mr-1" />
+                            Manage
+                          </Button>
+                        )}
+                        <Badge variant="outline" className="mt-0">Conducted</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
       <ChatWidget />

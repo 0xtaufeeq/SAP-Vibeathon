@@ -57,9 +57,11 @@ export default function ExplorePage() {
   useEffect(() => {
     async function fetchSessions() {
       try {
+        const now = new Date().toISOString()
         const { data, error } = await supabase
           .from('agenda_view')
           .select('*')
+          .gt('end_time', now) // Only show events that haven't ended yet
         
         if (error) throw error
         
